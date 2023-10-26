@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Cellular Automaton Visualization</title>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/110/three.min.js"></script>
+    <div>
+        <label for="updateSpeed">Update Speed (ms): </label>
+        <input type="number" id="updateSpeed" value="250" min="1">
+    </div>
+    <script>
+        const socket = new WebSocket("ws://localhost:8080/ws");
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+
+        renderer.setClearColor(0x87CEEB); 
+
+        document.body.appendChild(renderer.domElement);
+
+        const pointLight = new THREE.PointLight(0xFFFFFF, 1);
+        pointLight.position.set(10, 10, 10);
+        scene.add(pointLight);
+
+        const minX = -5;
+        const maxX = 5;  
+        const minY = -5; 
+        const maxY = 5;  
+        const minZ = -5; 
+        const maxZ = 5; 
+
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        const centerZ = (minZ + maxZ) / 2;
+
+        const cellStateBuffer = [];
+
+        function createCell(x, y, z) {
+            const geometry = new THREE.BoxGeometry();
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); 
+            const cube = new THREE.Mesh(geometry, material);
+            cube.position.set(x, y, z);
+            scene.add(cube);
+        }
+
+        for (let x = minX; x <= maxX; x++) {
+            for (let y = minY; y <= maxY; y++) {
+                for (let z = minZ; z <= maxZ; z++) {
+                    if (cellStateBuffer[x] && cellStateBuffer[x][y] && cellStateBuffer[x][y][z]) {
+                        createCell(x, y, z);
+                    }
+                }
+            }
+        }
+
+        camera.position.set(0, 0, 15);
+        camera.lookAt(centerX, centerY, centerZ);
+
+        let orbitAngle = 0; 
+
+        socket.onmessage = function(event) {
+            const cells = JSON.parse(event.data);
+
+            scene.children = [];
+
+            for (let x = minX; x <= maxX; x++) {
+                if (!cellStateBuffer[x]) {
+                    cellStateBuffer[x] = [];
+                }
+                for (let y = minY; y <= maxY; y++) {
+                    if (!cellStateBuffer[x][y]) {
+                        cellStateBuffer[x][y] = [];
+                    }
+                    for (let z = minZ; z <= maxZ; z++) {
+                        cellStateBuffer[x][y][z] = cells[x] && cells[x][y] && cells[x][y][z];
+                        if (cellStateBuffer[x][y][z]) {
+                            createCell(x, y, z);
+                        }
+                    }
+                }
+            }
+
+           
+            const radius = 17; 
+            const orbitSpeed = 0.120; 
+            orbitAngle += orbitSpeed;
+            camera.position.x = centerX + radius * Math.cos(orbitAngle);
+            camera.position.z = centerZ + radius * Math.sin(orbitAngle);
+
+            camera.lookAt(centerX, centerY, centerZ);
+
+            renderer.render(scene, camera);
+        };
+
+        const updateSpeedInput = document.getElementById("updateSpeed");
+
+        updateSpeedInput.addEventListener("input", function() {
+            const newSpeed = parseInt(updateSpeedInput.value);
+            if (!isNaN(newSpeed)) {
+            
+                socket.send(JSON.stringify({ speed: newSpeed }));
+            }
+        });
+
+        const animate = () => {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        };
+
+        animate();
+    </script>
+</body>
+</html>
